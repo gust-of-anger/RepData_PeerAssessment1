@@ -5,21 +5,83 @@ output:
     keep_md: true
 ---
 
+## Setting global knitr parameters to print 2 decimals.
+
+```{r echo = TRUE}
+library(knitr)
+options(scipen=1, digits=2)
+```
 
 ## Loading and preprocessing the data
 
-
+```{r echo = TRUE}
+library(dplyr)
+library(ggplot2)
+act <- read.csv('activity.csv')
+act$date <- as.Date(act$date, "%Y-%m-%d")
+```
 
 ## What is mean total number of steps taken per day?
 
+Grouping the data by day and summarizing using the sum function:
 
+```{r}
+act_grouped_day <- group_by(act, date)
+act_steps_day <- summarise(act_grouped_day, steps_per_day = sum(steps, na.rm = FALSE))
+```
+
+### Histogram of number of steps per day.
+
+```{r}
+qplot(act_steps_day$steps_per_day, fill=I('darkred'), col=I('black'), main='Histogram of total number of steps per day', xlab='Number of steps per day', ylab = 'Frequency')
+```
+
+The mean number of steps per day is `r mean(act_steps_day$steps_per_day, na.rm = TRUE)` and the median is `r median(act_steps_day$steps_per_day, na.rm = TRUE)`
 
 ## What is the average daily activity pattern?
 
+Grouping the data by interval and summarizing using the mean function:
 
+```{r echo = TRUE}
+act_interval_group <- group_by(act, interval)
+act_interval_avg <- summarise(act_interval_group, average_steps = mean(steps, na.rm = TRUE))
+with(act_interval_avg, qplot(interval, average_steps, col=I('darkred'), geom = "line", xlab = "5-minute interval", ylab = "Average number of steps per day", main = "Time series of the 5-minute interval and its average number of steps."))
+```
+
+The 5-minute interval with the maximum average number of steps per day is `r act_interval_avg[which(act_interval_avg$average_steps == max(act_interval_avg$average_steps)), ]['interval']`
 
 ## Imputing missing values
 
+There are `r sum(is.na(act$steps))` missing values in the dataset, which represents `r 100 * sum(is.na(act$steps)) / dim(act)[1]`% of the data.
 
+I will use a straightforward method to impute the missing values, using the average 5-minute interval of each day.
+
+```{r echo = TRUE}
+act_na_filled <- act
+act_na_filled[act_na_filled$interval == act_interval_avg$interval & is.na(act_na_filled), ]$steps <- act_interval_avg$average_steps
+```
+
+```{r echo = TRUE}
+nafilled_grouped_day <- group_by(act_na_filled, date)
+nafilled_steps_day <- summarise(nafilled_grouped_day, steps_per_day = sum(steps, na.rm = FALSE))
+qplot(nafilled_steps_day$steps_per_day, fill=I('darkred'), col=I('black'), main='Histogram of total number of steps per day', xlab='Number of steps per day', ylab = 'Frequency')
+```
+
+The mean number of steps per day with imputed missing values is `r mean(nafilled_steps_day$steps_per_day, na.rm = TRUE)` and the median is `r median(nafilled_steps_day$steps_per_day, na.rm = TRUE)`, almost the same as with the missing values.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r echo = TRUE}
+act_na_filled$week_day <- sapply(act_na_filled$date, FUN = function(x) {if (weekdays(x) == 'Sunday' | weekdays(x) == 'Saturday') {'Weekend'} else {'Weekday'}})
+act_na_filled$week_day <- factor(act_na_filled$week_day)
+act_na_filled_interval_group <- group_by(act_na_filled, interval, week_day)
+act_na_filled_int <- summarise(act_na_filled_interval_group, average_steps = mean(steps, na.rm = FALSE))
+```
+
+Panel plot comparing the time series of the 5-minute interval between weekdays and wekkends.
+
+```{r echo = TRUE}
+with(act_na_filled_int, qplot(interval, average_steps, facets=week_day ~ ., geom = "line", xlab = "5-minute interval",col=I('darkred'), ylab = "Average number of steps per day", main = "Time series of the 5-minute interval and its average number of steps per week day."))
+```
+
+The maximum number of steps is lower at the weekends.
